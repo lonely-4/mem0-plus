@@ -1,0 +1,31 @@
+'use strict';
+
+// Custom (API key) authentication for Mem0.
+// The key is sent as "Authorization: Token <apiKey>" (matches Mem0's SDKs).
+const test = (z, _bundle) =>
+	z.request({ url: '/v1/ping/', method: 'GET' });
+
+module.exports = {
+	type: 'custom',
+	test,
+	fields: [
+		{
+			key: 'apiKey',
+			label: 'Mem0 API Key',
+			type: 'string',
+			required: true,
+			helpText:
+				'Your Mem0 API key (starts with `m0-`). Create one at [app.mem0.ai](https://app.mem0.ai) → Settings → API Keys.',
+		},
+		{
+			key: 'baseUrl',
+			label: 'Base URL',
+			type: 'string',
+			required: false,
+			default: 'https://api.mem0.ai',
+			helpText: 'Override only for self-hosted or non-default deployments.',
+		},
+	],
+	// Shown on the connection label in the Zap editor.
+	connectionLabel: 'Mem0 ({{bundle.authData.baseUrl}})',
+};
