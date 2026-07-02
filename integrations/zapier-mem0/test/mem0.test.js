@@ -14,10 +14,11 @@ const authData = {
 
 const userId = `zapier-e2e-${Date.now()}`;
 
-describe('Mem0 Zapier integration (E2E)', () => {
-	beforeAll(() => {
-		if (!authData.apiKey) throw new Error('MEM0_API_KEY env var is required for E2E tests');
-	});
+// The E2E suite hits the live Mem0 API, so it only runs when MEM0_API_KEY is
+// set (locally / with a secret). In CI without a key it is skipped, not failed.
+const describeE2E = authData.apiKey ? describe : describe.skip;
+
+describeE2E('Mem0 Zapier integration (E2E)', () => {
 
 	it('authentication.test succeeds', async () => {
 		const res = await appTester(App.authentication.test, { authData });
