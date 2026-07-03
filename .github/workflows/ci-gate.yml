@@ -147,14 +147,14 @@ jobs:
     secrets: inherit
 
   n8n-nodes-mem0:
-    name: n8n node
+    name: n8n Node
     needs: changes
     if: needs.changes.outputs.n8n_nodes_mem0 == 'true'
     uses: ./.github/workflows/n8n-nodes-mem0-checks.yml
     secrets: inherit
 
   zapier-mem0:
-    name: Zapier app
+    name: Zapier App
     needs: changes
     if: needs.changes.outputs.zapier_mem0 == 'true'
     uses: ./.github/workflows/zapier-mem0-checks.yml

@@ -2,6 +2,18 @@
   "name": "zapier-mem0",
   "version": "0.1.0",
   "description": "Zapier integration for Mem0 — the memory layer for AI agents.",
+  "keywords": [
+    "zapier",
+    "mem0",
+    "memory",
+    "ai",
+    "agents"
+  ],
+  "homepage": "https://mem0.ai",
+  "author": {
+    "name": "Mem0",
+    "email": "founders@mem0.ai"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/mem0ai/mem0",

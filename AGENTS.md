@@ -431,6 +431,8 @@ PR testing is orchestrated by a single entry point: **`ci-gate.yml` (CI Gate)** 
 | OpenClaw | `openclaw-checks.yml` | Push to main (on `integrations/openclaw/`), manual | tsc + vitest (with Codecov) + tsup build on Node 20, 22 |
 | OpenCode Plugin | `opencode-plugin-checks.yml` | Push to main (on `integrations/mem0-plugin/.opencode-plugin/`), manual | Bun: tsc type-check + build + dist artifact check |
 | Pi Agent Plugin | `pi-agent-plugin-checks.yml` | Push to main (on `integrations/pi-agent-plugin/`), manual | tsc + vitest + tsup build (dist artifact check) on Node 20, 22 |
+| n8n Node | `n8n-nodes-mem0-checks.yml` | Push to main (on `integrations/n8n-nodes-mem0/`), manual | ESLint (n8n-nodes-base) + tsc build (dist artifact check) on Node 20 |
+| Zapier App | `zapier-mem0-checks.yml` | Push to main (on `integrations/zapier-mem0/`), manual | `zapier validate` (schema + style checks) on Node 20 |
 | docs llms.txt | `docs-llms-txt-check.yml` | Manual | `docs/llms.txt` coverage check |
 
 When adding a new package CI workflow: give it `workflow_call` (plus `push`/`workflow_dispatch` as needed, but no `pull_request` trigger), then register it in `ci-gate.yml` — a path filter under the `changes` job, a call job, and an entry in the gate job's `needs` list.
