@@ -45,7 +45,7 @@ jobs:
           cache-dependency-path: integrations/n8n-nodes-mem0/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Build
         run: pnpm run build
