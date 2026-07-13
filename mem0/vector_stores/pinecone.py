@@ -366,7 +366,7 @@ class PineconeDB(VectorStoreBase):
         namespace, the whole index is dropped (previous, single-tenant behavior).
         """
         try:
-            if self.namespace:
+            if self.namespace is not None:
                 self.index.delete(delete_all=True, namespace=self.namespace)
                 logger.info(f"Namespace {self.namespace} in index {self.collection_name} cleared successfully")
             else:
@@ -446,5 +446,5 @@ class PineconeDB(VectorStoreBase):
         """
         logger.warning(f"Resetting index {self.collection_name}...")
         self.delete_col()
-        if not self.namespace:
+        if self.namespace is None:
             self.create_col(self.embedding_model_dims, self.metric)

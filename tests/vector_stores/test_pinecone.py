@@ -154,11 +154,22 @@ def test_delete_col_with_namespace_scopes_to_namespace(pinecone_db):
     pinecone_db.client.delete_index.assert_not_called()
 
 
-def test_delete_col_namespace_not_found_handled_gracefully(pinecone_db):
-    """A namespace that was never written to raises on Pinecone's side; delete_col must
-    swallow it (matching this method's existing try/except pattern), not propagate it."""
+def test_delete_col_namespace_delete_error_handled_gracefully(pinecone_db):
+    """Any error from the namespace-scoped delete (e.g. a namespace that was never
+    written to) must be swallowed, matching this method's existing try/except pattern
+    on the whole-index branch -- not propagate and crash the caller's reset()."""
     pinecone_db.index.delete.side_effect = Exception("Namespace not found")
     pinecone_db.delete_col()  # must not raise
+
+
+def test_delete_col_empty_string_namespace_scopes_not_whole_index(pinecone_db):
+    """An explicitly-configured empty-string namespace (Pinecone's addressable default
+    namespace) is still "a namespace" -- it must NOT fall through to the whole-index
+    drop, which would destroy every other tenant's named namespace sharing this index."""
+    pinecone_db.namespace = ""
+    pinecone_db.delete_col()
+    pinecone_db.index.delete.assert_called_with(delete_all=True, namespace="")
+    pinecone_db.client.delete_index.assert_not_called()
 
 
 def test_reset_with_namespace_does_not_recreate_index(pinecone_db, mock_pinecone_client):
