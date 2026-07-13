@@ -358,12 +358,22 @@ class PineconeDB(VectorStoreBase):
         return self.client.list_indexes()
 
     def delete_col(self):
-        """Delete an index/collection."""
+        """Delete an index/collection.
+
+        When a namespace is configured, only that namespace's vectors are cleared
+        (Pinecone's namespace-scoped delete) so other tenants sharing the same index
+        are left untouched and the index itself is never dropped. Without a
+        namespace, the whole index is dropped (previous, single-tenant behavior).
+        """
         try:
-            self.client.delete_index(self.collection_name)
-            logger.info(f"Index {self.collection_name} deleted successfully")
+            if self.namespace:
+                self.index.delete(delete_all=True, namespace=self.namespace)
+                logger.info(f"Namespace {self.namespace} in index {self.collection_name} cleared successfully")
+            else:
+                self.client.delete_index(self.collection_name)
+                logger.info(f"Index {self.collection_name} deleted successfully")
         except Exception as e:
-            logger.error(f"Error deleting index {self.collection_name}: {e}")
+            logger.error(f"Error deleting index {self.collection_name} (namespace={self.namespace}): {e}")
 
     def col_info(self) -> Dict:
         """
@@ -429,8 +439,12 @@ class PineconeDB(VectorStoreBase):
 
     def reset(self):
         """
-        Reset the index by deleting and recreating it.
+        Reset the index by deleting its data and recreating it.
+
+        When a namespace is configured, `delete_col()` clears only that namespace and
+        the index itself still exists, so no recreation is needed.
         """
         logger.warning(f"Resetting index {self.collection_name}...")
         self.delete_col()
-        self.create_col(self.embedding_model_dims, self.metric)
+        if not self.namespace:
+            self.create_col(self.embedding_model_dims, self.metric)

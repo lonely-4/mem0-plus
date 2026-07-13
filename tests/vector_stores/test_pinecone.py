@@ -139,9 +139,43 @@ def test_list_cols(pinecone_db):
     pinecone_db.client.list_indexes.assert_called()
 
 
-def test_delete_col(pinecone_db):
+def test_delete_col_without_namespace_drops_index(pinecone_db):
+    """No namespace configured: preserve today's behavior (drop the whole index)."""
+    pinecone_db.namespace = None
     pinecone_db.delete_col()
     pinecone_db.client.delete_index.assert_called_with("test_index")
+
+
+def test_delete_col_with_namespace_scopes_to_namespace(pinecone_db):
+    """Namespace configured: only that namespace is cleared, other tenants' data (and
+    the index itself) must survive -- the index must NEVER be dropped."""
+    pinecone_db.delete_col()
+    pinecone_db.index.delete.assert_called_with(delete_all=True, namespace="test_namespace")
+    pinecone_db.client.delete_index.assert_not_called()
+
+
+def test_delete_col_namespace_not_found_handled_gracefully(pinecone_db):
+    """A namespace that was never written to raises on Pinecone's side; delete_col must
+    swallow it (matching this method's existing try/except pattern), not propagate it."""
+    pinecone_db.index.delete.side_effect = Exception("Namespace not found")
+    pinecone_db.delete_col()  # must not raise
+
+
+def test_reset_with_namespace_does_not_recreate_index(pinecone_db, mock_pinecone_client):
+    """Namespaced reset: the index is never dropped, so it does not need recreating."""
+    mock_pinecone_client.create_index.reset_mock()
+    pinecone_db.reset()
+    pinecone_db.index.delete.assert_called_with(delete_all=True, namespace="test_namespace")
+    mock_pinecone_client.create_index.assert_not_called()
+
+
+def test_reset_without_namespace_drops_and_recreates_index(pinecone_db, mock_pinecone_client):
+    """No namespace: preserve today's behavior (drop then recreate the index)."""
+    pinecone_db.namespace = None
+    mock_pinecone_client.list_indexes.return_value.names.return_value = []
+    pinecone_db.reset()
+    mock_pinecone_client.delete_index.assert_called_with("test_index")
+    mock_pinecone_client.create_index.assert_called()
 
 
 def test_col_info(pinecone_db):
