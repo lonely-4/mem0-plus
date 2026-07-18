@@ -1,24 +1,39 @@
-import { Groq } from "groq-sdk";
+import type { Groq } from "groq-sdk";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
 
 export class GroqLLM implements LLM {
-  private client: Groq;
+  private client!: Groq;
   private model: string;
+  private readonly apiKey: string;
 
   constructor(config: LLMConfig) {
     const apiKey = config.apiKey || process.env.GROQ_API_KEY;
     if (!apiKey) {
       throw new Error("Groq API key is required");
     }
-    this.client = new Groq({ apiKey });
+    this.apiKey = apiKey;
     this.model = config.model || "llama3-70b-8192";
+  }
+
+  private async ensureClient(): Promise<void> {
+    if (this.client) return;
+    let sdk: any;
+    try {
+      sdk = await import("groq-sdk");
+    } catch {
+      throw new Error(
+        "The 'groq-sdk' package is required to use the Groq LLM. Install it with: npm install groq-sdk",
+      );
+    }
+    this.client = new sdk.Groq({ apiKey: this.apiKey });
   }
 
   async generateResponse(
     messages: Message[],
     responseFormat?: { type: string },
   ): Promise<string> {
+    await this.ensureClient();
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: messages.map((msg) => ({
@@ -35,6 +50,7 @@ export class GroqLLM implements LLM {
   }
 
   async generateChat(messages: Message[]): Promise<LLMResponse> {
+    await this.ensureClient();
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: messages.map((msg) => ({

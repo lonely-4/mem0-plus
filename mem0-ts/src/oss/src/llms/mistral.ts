@@ -1,19 +1,31 @@
-import { Mistral } from "@mistralai/mistralai";
+import type { Mistral } from "@mistralai/mistralai";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
 
 export class MistralLLM implements LLM {
-  private client: Mistral;
+  private client!: Mistral;
   private model: string;
+  private readonly apiKey: string;
 
   constructor(config: LLMConfig) {
     if (!config.apiKey) {
       throw new Error("Mistral API key is required");
     }
-    this.client = new Mistral({
-      apiKey: config.apiKey,
-    });
+    this.apiKey = config.apiKey;
     this.model = config.model || "mistral-tiny-latest";
+  }
+
+  private async ensureClient(): Promise<void> {
+    if (this.client) return;
+    let sdk: any;
+    try {
+      sdk = await import("@mistralai/mistralai");
+    } catch {
+      throw new Error(
+        "The '@mistralai/mistralai' package is required to use the Mistral LLM. Install it with: npm install @mistralai/mistralai",
+      );
+    }
+    this.client = new sdk.Mistral({ apiKey: this.apiKey });
   }
 
   // Helper function to convert content to string
@@ -41,6 +53,7 @@ export class MistralLLM implements LLM {
     responseFormat?: { type: string },
     tools?: any[],
   ): Promise<string | LLMResponse> {
+    await this.ensureClient();
     const response = await this.client.chat.complete({
       model: this.model,
       messages: messages.map((msg) => ({
@@ -82,6 +95,7 @@ export class MistralLLM implements LLM {
   }
 
   async generateChat(messages: Message[]): Promise<LLMResponse> {
+    await this.ensureClient();
     const formattedMessages = messages.map((msg) => ({
       role: msg.role as "system" | "user" | "assistant",
       content:

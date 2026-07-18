@@ -1,19 +1,18 @@
-import { Ollama } from "ollama";
+import type { Ollama } from "ollama";
 import { Embedder } from "./base";
 import { EmbeddingConfig } from "../types";
 import { logger } from "../utils/logger";
 
 export class OllamaEmbedder implements Embedder {
-  private ollama: Ollama;
+  private ollama!: Ollama;
   private model: string;
   private embeddingDims?: number;
+  private readonly host: string;
   // Using this variable to avoid calling the Ollama server multiple times
   private initialized: boolean = false;
 
   constructor(config: EmbeddingConfig) {
-    this.ollama = new Ollama({
-      host: config.url || config.baseURL || "http://localhost:11434",
-    });
+    this.host = config.url || config.baseURL || "http://localhost:11434";
     this.model = config.model || "nomic-embed-text:latest";
     this.embeddingDims = config.embeddingDims || 768;
     this.ensureModelExists().catch((err) => {
@@ -21,7 +20,21 @@ export class OllamaEmbedder implements Embedder {
     });
   }
 
+  private async ensureClient(): Promise<void> {
+    if (this.ollama) return;
+    let sdk: any;
+    try {
+      sdk = await import("ollama");
+    } catch {
+      throw new Error(
+        "The 'ollama' package is required to use the Ollama embedder. Install it with: npm install ollama",
+      );
+    }
+    this.ollama = new sdk.Ollama({ host: this.host });
+  }
+
   async embed(text: string): Promise<number[]> {
+    await this.ensureClient();
     try {
       await this.ensureModelExists();
     } catch (err) {
@@ -54,6 +67,7 @@ export class OllamaEmbedder implements Embedder {
     if (this.initialized) {
       return true;
     }
+    await this.ensureClient();
     const local_models = await this.ollama.list();
     const target = OllamaEmbedder.normalizeModelName(this.model);
     if (

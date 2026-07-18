@@ -1,9 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
 
 export class AnthropicLLM implements LLM {
-  private client: Anthropic;
+  private client!: Anthropic;
+  private readonly clientArgs: { apiKey: string; baseURL?: string };
   private model: string;
   private maxTokens: number;
   private temperature?: number;
@@ -20,7 +21,7 @@ export class AnthropicLLM implements LLM {
     if (config.baseURL) {
       clientArgs.baseURL = config.baseURL;
     }
-    this.client = new Anthropic(clientArgs);
+    this.clientArgs = clientArgs;
     this.model = config.model || "claude-sonnet-4-6";
     // Defaults mirror the Python provider's AnthropicConfig
     // (max_tokens=2000, temperature=0.1, top_p omitted).
@@ -29,11 +30,25 @@ export class AnthropicLLM implements LLM {
     this.topP = config.topP;
   }
 
+  private async ensureClient(): Promise<void> {
+    if (this.client) return;
+    let sdk: any;
+    try {
+      sdk = await import("@anthropic-ai/sdk");
+    } catch {
+      throw new Error(
+        "The '@anthropic-ai/sdk' package is required to use the Anthropic LLM. Install it with: npm install @anthropic-ai/sdk",
+      );
+    }
+    this.client = new sdk.default(this.clientArgs);
+  }
+
   async generateResponse(
     messages: Message[],
     responseFormat?: { type: string },
     tools?: any[],
   ): Promise<string | LLMResponse> {
+    await this.ensureClient();
     // Extract system message if present
     const systemMessage = messages.find((msg) => msg.role === "system");
     const otherMessages = messages.filter((msg) => msg.role !== "system");

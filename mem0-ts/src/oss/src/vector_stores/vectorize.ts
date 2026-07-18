@@ -1,4 +1,4 @@
-import Cloudflare from "cloudflare";
+import type Cloudflare from "cloudflare";
 import type { Vectorize, VectorizeVector } from "@cloudflare/workers-types";
 import { VectorStore } from "./base";
 import { SearchFilters, VectorStoreConfig, VectorStoreResult } from "../types";
@@ -17,17 +17,31 @@ interface CloudflareVector {
 
 export class VectorizeDB implements VectorStore {
   private client: Cloudflare | null = null;
+  private apiKey?: string;
   private dimensions: number;
   private indexName: string;
   private accountId: string;
   private _initPromise?: Promise<void>;
 
   constructor(config: VectorizeConfig) {
-    this.client = new Cloudflare({ apiToken: config.apiKey });
+    this.apiKey = config.apiKey;
     this.dimensions = config.dimension || 1536;
     this.indexName = config.indexName;
     this.accountId = config.accountId;
     this.initialize().catch(console.error);
+  }
+
+  private async ensureClient(): Promise<void> {
+    if (this.client) return;
+    let sdk: any;
+    try {
+      sdk = await import("cloudflare");
+    } catch {
+      throw new Error(
+        "The 'cloudflare' package is required to use the Vectorize vector store. Install it with: npm install cloudflare",
+      );
+    }
+    this.client = new sdk.default({ apiToken: this.apiKey });
   }
 
   async insert(
@@ -35,6 +49,7 @@ export class VectorizeDB implements VectorStore {
     ids: string[],
     payloads: Record<string, any>[],
   ): Promise<void> {
+    await this.initialize();
     try {
       const vectorObjects: CloudflareVector[] = vectors.map(
         (vector, index) => ({
@@ -83,6 +98,7 @@ export class VectorizeDB implements VectorStore {
     topK: number = 5,
     filters?: SearchFilters,
   ): Promise<VectorStoreResult[]> {
+    await this.initialize();
     try {
       const result = await this.client?.vectorize.indexes.query(
         this.indexName,
@@ -111,6 +127,7 @@ export class VectorizeDB implements VectorStore {
   }
 
   async get(vectorId: string): Promise<VectorStoreResult | null> {
+    await this.initialize();
     try {
       const result = (await this.client?.vectorize.indexes.getByIds(
         this.indexName,
@@ -139,6 +156,7 @@ export class VectorizeDB implements VectorStore {
     vector: number[],
     payload: Record<string, any>,
   ): Promise<void> {
+    await this.initialize();
     try {
       const data: VectorizeVector = {
         id: vectorId,
@@ -173,6 +191,7 @@ export class VectorizeDB implements VectorStore {
   }
 
   async delete(vectorId: string): Promise<void> {
+    await this.initialize();
     try {
       await this.client?.vectorize.indexes.deleteByIds(this.indexName, {
         account_id: this.accountId,
@@ -187,6 +206,7 @@ export class VectorizeDB implements VectorStore {
   }
 
   async deleteCol(): Promise<void> {
+    await this.initialize();
     try {
       await this.client?.vectorize.indexes.delete(this.indexName, {
         account_id: this.accountId,
@@ -203,6 +223,7 @@ export class VectorizeDB implements VectorStore {
     filters?: SearchFilters,
     topK: number = 20,
   ): Promise<[VectorStoreResult[], number]> {
+    await this.initialize();
     try {
       const result = await this.client?.vectorize.indexes.query(
         this.indexName,
@@ -243,6 +264,7 @@ export class VectorizeDB implements VectorStore {
   }
 
   async getUserId(): Promise<string> {
+    await this.initialize();
     try {
       let found = false;
       for await (const index of this.client!.vectorize.indexes.list({
@@ -309,6 +331,7 @@ export class VectorizeDB implements VectorStore {
   }
 
   async setUserId(userId: string): Promise<void> {
+    await this.initialize();
     try {
       // Get existing point ID
       const result: any = await this.client?.vectorize.indexes.query(
@@ -355,6 +378,7 @@ export class VectorizeDB implements VectorStore {
   }
 
   private async _doInitialize(): Promise<void> {
+    await this.ensureClient();
     try {
       // Check if the index already exists
       let indexFound = false;
