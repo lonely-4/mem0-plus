@@ -2,6 +2,7 @@ import type { Ollama } from "ollama";
 import { Embedder } from "./base";
 import { EmbeddingConfig } from "../types";
 import { logger } from "../utils/logger";
+import { loadPeer } from "../utils/load_peer";
 
 export class OllamaEmbedder implements Embedder {
   private ollama!: Ollama;
@@ -22,14 +23,11 @@ export class OllamaEmbedder implements Embedder {
 
   private async ensureClient(): Promise<void> {
     if (this.ollama) return;
-    let sdk: any;
-    try {
-      sdk = await import("ollama");
-    } catch {
-      throw new Error(
-        "The 'ollama' package is required to use the Ollama embedder. Install it with: npm install ollama",
-      );
-    }
+    const sdk = await loadPeer(
+      "ollama",
+      "Ollama embedder",
+      () => import("ollama"),
+    );
     this.ollama = new sdk.Ollama({ host: this.host });
   }
 

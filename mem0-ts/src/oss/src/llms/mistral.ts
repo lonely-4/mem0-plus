@@ -1,6 +1,7 @@
 import type { Mistral } from "@mistralai/mistralai";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 export class MistralLLM implements LLM {
   private client!: Mistral;
@@ -17,14 +18,11 @@ export class MistralLLM implements LLM {
 
   private async ensureClient(): Promise<void> {
     if (this.client) return;
-    let sdk: any;
-    try {
-      sdk = await import("@mistralai/mistralai");
-    } catch {
-      throw new Error(
-        "The '@mistralai/mistralai' package is required to use the Mistral LLM. Install it with: npm install @mistralai/mistralai",
-      );
-    }
+    const sdk = await loadPeer(
+      "@mistralai/mistralai",
+      "Mistral LLM",
+      () => import("@mistralai/mistralai"),
+    );
     this.client = new sdk.Mistral({ apiKey: this.apiKey });
   }
 

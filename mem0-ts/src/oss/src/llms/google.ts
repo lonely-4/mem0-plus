@@ -1,6 +1,7 @@
 import type { GoogleGenAI } from "@google/genai";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 export class GoogleLLM implements LLM {
   private google!: GoogleGenAI;
@@ -14,14 +15,11 @@ export class GoogleLLM implements LLM {
 
   private async ensureClient(): Promise<void> {
     if (this.google) return;
-    let sdk: any;
-    try {
-      sdk = await import("@google/genai");
-    } catch {
-      throw new Error(
-        "The '@google/genai' package is required to use the Google LLM. Install it with: npm install @google/genai",
-      );
-    }
+    const sdk = await loadPeer(
+      "@google/genai",
+      "Google LLM",
+      () => import("@google/genai"),
+    );
     this.google = new sdk.GoogleGenAI({ apiKey: this.apiKey });
   }
 

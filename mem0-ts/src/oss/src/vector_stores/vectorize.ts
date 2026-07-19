@@ -2,6 +2,7 @@ import type Cloudflare from "cloudflare";
 import type { Vectorize, VectorizeVector } from "@cloudflare/workers-types";
 import { VectorStore } from "./base";
 import { SearchFilters, VectorStoreConfig, VectorStoreResult } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 interface VectorizeConfig extends VectorStoreConfig {
   apiKey?: string;
@@ -33,14 +34,11 @@ export class VectorizeDB implements VectorStore {
 
   private async ensureClient(): Promise<void> {
     if (this.client) return;
-    let sdk: any;
-    try {
-      sdk = await import("cloudflare");
-    } catch {
-      throw new Error(
-        "The 'cloudflare' package is required to use the Vectorize vector store. Install it with: npm install cloudflare",
-      );
-    }
+    const sdk = await loadPeer(
+      "cloudflare",
+      "Vectorize vector store",
+      () => import("cloudflare"),
+    );
     this.client = new sdk.default({ apiToken: this.apiKey });
   }
 

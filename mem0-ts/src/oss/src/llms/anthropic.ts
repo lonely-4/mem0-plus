@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 export class AnthropicLLM implements LLM {
   private client!: Anthropic;
@@ -32,14 +33,11 @@ export class AnthropicLLM implements LLM {
 
   private async ensureClient(): Promise<void> {
     if (this.client) return;
-    let sdk: any;
-    try {
-      sdk = await import("@anthropic-ai/sdk");
-    } catch {
-      throw new Error(
-        "The '@anthropic-ai/sdk' package is required to use the Anthropic LLM. Install it with: npm install @anthropic-ai/sdk",
-      );
-    }
+    const sdk = await loadPeer(
+      "@anthropic-ai/sdk",
+      "Anthropic LLM",
+      () => import("@anthropic-ai/sdk"),
+    );
     this.client = new sdk.default(this.clientArgs);
   }
 

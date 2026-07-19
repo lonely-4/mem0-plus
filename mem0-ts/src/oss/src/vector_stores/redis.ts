@@ -7,6 +7,7 @@ import type {
 } from "redis";
 import { VectorStore } from "./base";
 import { SearchFilters, VectorStoreConfig, VectorStoreResult } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 /**
  * Escape RediSearch TAG filter special characters. Any punctuation in the
@@ -189,14 +190,11 @@ export class RedisDB implements VectorStore {
 
   private async ensureClient(): Promise<void> {
     if (this.client) return;
-    let sdk: any;
-    try {
-      sdk = await import("redis");
-    } catch {
-      throw new Error(
-        "The 'redis' package is required to use the Redis vector store. Install it with: npm install redis",
-      );
-    }
+    const sdk = await loadPeer(
+      "redis",
+      "Redis vector store",
+      () => import("redis"),
+    );
     this.client = sdk.createClient({
       url: this.redisUrl,
       username: this.username,

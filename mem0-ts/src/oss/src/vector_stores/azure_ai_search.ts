@@ -14,6 +14,7 @@ import type {
 } from "@azure/search-documents";
 import { VectorStore } from "./base";
 import { SearchFilters, VectorStoreConfig, VectorStoreResult } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 /**
  * Configuration interface for Azure AI Search vector store
@@ -97,14 +98,11 @@ export class AzureAISearch implements VectorStore {
 
   private async ensureClient(): Promise<void> {
     if (this.searchClient) return;
-    let searchSdk: any;
-    try {
-      searchSdk = await import("@azure/search-documents");
-    } catch {
-      throw new Error(
-        "The '@azure/search-documents' package is required to use the Azure AI Search vector store. Install it with: npm install @azure/search-documents",
-      );
-    }
+    const searchSdk = await loadPeer(
+      "@azure/search-documents",
+      "Azure AI Search vector store",
+      () => import("@azure/search-documents"),
+    );
 
     const serviceEndpoint = `https://${this.serviceName}.search.windows.net`;
 
@@ -113,14 +111,11 @@ export class AzureAISearch implements VectorStore {
     if (this.apiKey && this.apiKey !== "" && this.apiKey !== "your-api-key") {
       credential = new searchSdk.AzureKeyCredential(this.apiKey);
     } else {
-      let identitySdk: any;
-      try {
-        identitySdk = await import("@azure/identity");
-      } catch {
-        throw new Error(
-          "The '@azure/identity' package is required for Azure AI Search when no apiKey is provided. Install it with: npm install @azure/identity",
-        );
-      }
+      const identitySdk = await loadPeer(
+        "@azure/identity",
+        "Azure AI Search without an apiKey",
+        () => import("@azure/identity"),
+      );
       credential = new identitySdk.DefaultAzureCredential();
     }
 

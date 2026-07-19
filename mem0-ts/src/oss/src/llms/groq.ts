@@ -1,6 +1,7 @@
 import type { Groq } from "groq-sdk";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 export class GroqLLM implements LLM {
   private client!: Groq;
@@ -18,14 +19,11 @@ export class GroqLLM implements LLM {
 
   private async ensureClient(): Promise<void> {
     if (this.client) return;
-    let sdk: any;
-    try {
-      sdk = await import("groq-sdk");
-    } catch {
-      throw new Error(
-        "The 'groq-sdk' package is required to use the Groq LLM. Install it with: npm install groq-sdk",
-      );
-    }
+    const sdk = await loadPeer(
+      "groq-sdk",
+      "Groq LLM",
+      () => import("groq-sdk"),
+    );
     this.client = new sdk.Groq({ apiKey: this.apiKey });
   }
 

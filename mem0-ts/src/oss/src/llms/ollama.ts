@@ -2,6 +2,7 @@ import type { Ollama } from "ollama";
 import { LLM, LLMResponse } from "./base";
 import { LLMConfig, Message } from "../types";
 import { logger } from "../utils/logger";
+import { loadPeer } from "../utils/load_peer";
 
 export class OllamaLLM implements LLM {
   private ollama!: Ollama;
@@ -20,14 +21,7 @@ export class OllamaLLM implements LLM {
 
   private async ensureClient(): Promise<void> {
     if (this.ollama) return;
-    let sdk: any;
-    try {
-      sdk = await import("ollama");
-    } catch {
-      throw new Error(
-        "The 'ollama' package is required to use the Ollama LLM. Install it with: npm install ollama",
-      );
-    }
+    const sdk = await loadPeer("ollama", "Ollama LLM", () => import("ollama"));
     this.ollama = new sdk.Ollama({ host: this.host });
   }
 

@@ -1,6 +1,7 @@
 import type { GoogleGenAI } from "@google/genai";
 import { Embedder } from "./base";
 import { EmbeddingConfig } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 export class GoogleEmbedder implements Embedder {
   private google!: GoogleGenAI;
@@ -16,14 +17,11 @@ export class GoogleEmbedder implements Embedder {
 
   private async ensureClient(): Promise<void> {
     if (this.google) return;
-    let sdk: any;
-    try {
-      sdk = await import("@google/genai");
-    } catch {
-      throw new Error(
-        "The '@google/genai' package is required to use the Google embedder. Install it with: npm install @google/genai",
-      );
-    }
+    const sdk = await loadPeer(
+      "@google/genai",
+      "Google embedder",
+      () => import("@google/genai"),
+    );
     this.google = new sdk.GoogleGenAI({ apiKey: this.apiKey });
   }
 

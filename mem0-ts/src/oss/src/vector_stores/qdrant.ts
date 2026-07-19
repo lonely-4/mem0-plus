@@ -1,6 +1,7 @@
 import type { QdrantClient } from "@qdrant/js-client-rest";
 import { VectorStore } from "./base";
 import { SearchFilters, VectorStoreConfig, VectorStoreResult } from "../types";
+import { loadPeer } from "../utils/load_peer";
 import * as fs from "fs";
 
 interface QdrantConfig extends VectorStoreConfig {
@@ -105,14 +106,11 @@ export class Qdrant implements VectorStore {
       }
     }
 
-    let sdk: any;
-    try {
-      sdk = await import("@qdrant/js-client-rest");
-    } catch {
-      throw new Error(
-        "The '@qdrant/js-client-rest' package is required to use the Qdrant vector store. Install it with: npm install @qdrant/js-client-rest",
-      );
-    }
+    const sdk = await loadPeer(
+      "@qdrant/js-client-rest",
+      "Qdrant vector store",
+      () => import("@qdrant/js-client-rest"),
+    );
     this.client = new sdk.QdrantClient(params);
   }
 

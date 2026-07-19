@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { VectorStore } from "./base";
 import { SearchFilters, VectorStoreConfig, VectorStoreResult } from "../types";
+import { loadPeer } from "../utils/load_peer";
 
 interface VectorData {
   id: string;
@@ -104,14 +105,11 @@ export class SupabaseDB implements VectorStore {
 
   private async ensureClient(): Promise<void> {
     if (this.client) return;
-    let sdk: any;
-    try {
-      sdk = await import("@supabase/supabase-js");
-    } catch {
-      throw new Error(
-        "The '@supabase/supabase-js' package is required to use the Supabase vector store. Install it with: npm install @supabase/supabase-js",
-      );
-    }
+    const sdk = await loadPeer(
+      "@supabase/supabase-js",
+      "Supabase vector store",
+      () => import("@supabase/supabase-js"),
+    );
     this.client = sdk.createClient(this.supabaseUrl, this.supabaseKey);
   }
 

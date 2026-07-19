@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
 import { HistoryManager } from "./base";
+import { loadPeer } from "../utils/load_peer";
 
 interface HistoryEntry {
   id: string;
@@ -36,14 +37,11 @@ export class SupabaseHistoryManager implements HistoryManager {
 
   private async ensureClient(): Promise<void> {
     if (this.supabase) return;
-    let sdk: any;
-    try {
-      sdk = await import("@supabase/supabase-js");
-    } catch {
-      throw new Error(
-        "The '@supabase/supabase-js' package is required to use the Supabase history manager. Install it with: npm install @supabase/supabase-js",
-      );
-    }
+    const sdk = await loadPeer(
+      "@supabase/supabase-js",
+      "Supabase history manager",
+      () => import("@supabase/supabase-js"),
+    );
     this.supabase = sdk.createClient(this.supabaseUrl, this.supabaseKey);
   }
 
