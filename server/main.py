@@ -220,6 +220,10 @@ class MemoryUpdate(BaseModel):
     expiration_date: Optional[str] = Field(None, description="Expiration date in YYYY-MM-DD format, or null to clear.")
 
 
+class MemoryBatchDelete(BaseModel):
+    memory_ids: List[str] = Field(..., min_length=1, max_length=200, description="Memory IDs to delete (max 200).")
+
+
 class SearchRequest(BaseModel):
     query: str = Field(..., description="Search query.")
     user_id: Optional[str] = Field(None, description="Deprecated: pass inside `filters` instead.", deprecated=True)
@@ -574,6 +578,38 @@ def delete_memory(memory_id: str, _auth=Depends(verify_auth)):
         raise _client_error(e)
     except Exception:
         raise upstream_error()
+
+
+@app.post("/memories/batch-delete", summary="Batch delete memories")
+def batch_delete_memories(body: MemoryBatchDelete, _auth=Depends(verify_auth)):
+    """Delete multiple memories by ID. Returns per-id success/failure without aborting the whole batch."""
+    memory = get_memory_instance()
+    deleted: List[str] = []
+    failed: List[Dict[str, str]] = []
+    # Preserve order, drop duplicates
+    seen: set[str] = set()
+    ordered_ids: List[str] = []
+    for mid in body.memory_ids:
+        if mid and mid not in seen:
+            seen.add(mid)
+            ordered_ids.append(mid)
+
+    for memory_id in ordered_ids:
+        try:
+            memory.delete(memory_id=memory_id)
+            deleted.append(memory_id)
+        except (ValueError, Mem0ValidationError) as e:
+            failed.append({"id": memory_id, "error": str(e)})
+        except Exception as e:
+            logging.warning("batch-delete failed for %s: %s", memory_id, e)
+            failed.append({"id": memory_id, "error": "delete failed"})
+
+    return {
+        "deleted": deleted,
+        "failed": failed,
+        "deleted_count": len(deleted),
+        "failed_count": len(failed),
+    }
 
 
 @app.delete("/memories", summary="Delete all memories", response_model=MessageResponse)

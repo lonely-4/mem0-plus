@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/shared/data-table";
 import { TableSkeleton } from "@/components/shared/table-skeleton";
 import { EmptyState } from "@/components/self-hosted/empty-state";
@@ -18,7 +19,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { UpgradeBanner } from "@/components/self-hosted/upgrade-banner";
 import { toast } from "@/components/ui/use-toast";
 import { getErrorMessage } from "@/lib/error-message";
 import { api } from "@/utils/api";
@@ -29,11 +29,15 @@ import { Memory } from "@/types/api";
 const PAGE_SIZE = 20;
 // Keep in sync with ALL_MEMORIES_LIMIT in server/main.py.
 const MEMORY_FETCH_LIMIT = 1000;
+const BATCH_DELETE_CONFIRM_WORD = "DELETE";
 
 export default function MemoriesPage() {
   const [userId, setUserId] = useState("");
   const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
   const [memoryToDelete, setMemoryToDelete] = useState<Memory | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const [page, setPage] = useState(0);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -59,12 +63,46 @@ export default function MemoriesPage() {
     (page + 1) * PAGE_SIZE,
   );
 
+  const pageIds = useMemo(
+    () => paginatedMemories.map((m) => m.id).filter(Boolean),
+    [paginatedMemories],
+  );
+  const allPageSelected =
+    pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+  const somePageSelected =
+    pageIds.some((id) => selectedIds.has(id)) && !allPageSelected;
+
+  const toggleId = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const togglePage = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of pageIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+
   const handleDelete = async () => {
     if (!memoryToDelete) return;
     try {
       await api.delete(MEMORY_ENDPOINTS.BY_ID(memoryToDelete.id));
       toast({ title: "Memory deleted", variant: "success" });
       if (selectedMemory?.id === memoryToDelete.id) setSelectedMemory(null);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(memoryToDelete.id);
+        return next;
+      });
       setMemoryToDelete(null);
       void refetch();
     } catch (error) {
@@ -76,7 +114,71 @@ export default function MemoriesPage() {
     }
   };
 
+  const handleBatchDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBatchDeleting(true);
+    try {
+      const res = await api.post<{
+        deleted: string[];
+        failed: { id: string; error: string }[];
+        deleted_count: number;
+        failed_count: number;
+      }>(MEMORY_ENDPOINTS.BATCH_DELETE, { memory_ids: ids });
+      const deletedCount = res.data?.deleted_count ?? 0;
+      const failedCount = res.data?.failed_count ?? 0;
+      if (failedCount === 0) {
+        toast({
+          title: `Deleted ${deletedCount} memor${deletedCount === 1 ? "y" : "ies"}`,
+          variant: "success",
+        });
+      } else {
+        toast({
+          title: `Deleted ${deletedCount}, failed ${failedCount}`,
+          description: "Some memories could not be deleted.",
+          variant: "destructive",
+        });
+      }
+      if (
+        selectedMemory &&
+        (res.data?.deleted ?? []).includes(selectedMemory.id)
+      ) {
+        setSelectedMemory(null);
+      }
+      setSelectedIds(new Set());
+      setBatchDeleteOpen(false);
+      void refetch();
+    } catch (error) {
+      toast({
+        title: "Batch delete failed",
+        description: getErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+
   const columns = [
+    {
+      key: "id" as keyof Memory,
+      label: "",
+      width: 48,
+      cellVariant: "flush" as const,
+      render: (_value: string, row: Memory) => (
+        <div
+          className="flex items-center justify-center px-2"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={selectedIds.has(row.id)}
+            onCheckedChange={(v) => toggleId(row.id, v === true)}
+            aria-label={`Select memory ${row.id}`}
+          />
+        </div>
+      ),
+    },
     {
       key: "memory" as keyof Memory,
       label: "Content",
@@ -98,19 +200,28 @@ export default function MemoriesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold font-fustat">Memories</h1>
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="text-xl font-semibold font-fustat">Memories</h1>
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-onSurface-default-secondary">
+              {selectedIds.size} selected
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-onSurface-danger-primary"
+              onClick={() => setBatchDeleteOpen(true)}
+              disabled={batchDeleting}
+            >
+              <Trash2 className="size-3.5 mr-1" />
+              Delete selected
+            </Button>
+          </div>
+        )}
+      </div>
 
-      {memories.length >= MEMORY_FETCH_LIMIT && (
-        <UpgradeBanner
-          id="memories-1k"
-          message="1,000+ memories stored. Categories can help organize them."
-          ctaLabel="Explore Cloud"
-          ctaUrl="https://app.mem0.ai?utm_source=oss&utm_medium=dashboard-memories"
-          variant="cloud"
-        />
-      )}
-
-      <div className="flex gap-3">
+      <div className="flex gap-3 items-center">
         <Input
           placeholder="Filter by User ID (optional)"
           value={userId}
@@ -118,15 +229,32 @@ export default function MemoriesPage() {
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               setPage(0);
+              setSelectedIds(new Set());
               refetch();
             }
           }}
           className="w-64"
         />
+        {paginatedMemories.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-onSurface-default-secondary cursor-pointer select-none">
+            <Checkbox
+              checked={
+                allPageSelected
+                  ? true
+                  : somePageSelected
+                    ? "indeterminate"
+                    : false
+              }
+              onCheckedChange={(v) => togglePage(v === true)}
+              aria-label="Select all on this page"
+            />
+            Select page
+          </label>
+        )}
       </div>
 
       {isLoading ? (
-        <TableSkeleton rows={5} columns={4} />
+        <TableSkeleton rows={5} columns={5} />
       ) : memories.length === 0 ? (
         <EmptyState
           title="No memories yet"
@@ -156,7 +284,7 @@ export default function MemoriesPage() {
               getRowKey={(row) => row.id}
               onRowClick={(row) => setSelectedMemory(row)}
               getRowClassName={(row) =>
-                selectedMemory?.id === row.id
+                selectedMemory?.id === row.id || selectedIds.has(row.id)
                   ? "bg-surface-default-tertiary"
                   : undefined
               }
@@ -271,6 +399,20 @@ export default function MemoriesPage() {
         description="This memory will be permanently removed. This cannot be undone."
         itemName={memoryToDelete?.id ?? ""}
         confirmButtonText="Delete"
+      />
+
+      <DeleteConfirmationModal
+        isOpen={batchDeleteOpen}
+        onClose={() => {
+          if (!batchDeleting) setBatchDeleteOpen(false);
+        }}
+        onConfirm={handleBatchDelete}
+        title={`Delete ${selectedIds.size} memor${selectedIds.size === 1 ? "y" : "ies"}`}
+        description={`You are about to permanently delete ${selectedIds.size} selected memor${selectedIds.size === 1 ? "y" : "ies"}. This cannot be undone. Type ${BATCH_DELETE_CONFIRM_WORD} to confirm.`}
+        itemName={BATCH_DELETE_CONFIRM_WORD}
+        confirmButtonText={
+          batchDeleting ? "Deleting…" : `Delete ${selectedIds.size}`
+        }
       />
     </div>
   );

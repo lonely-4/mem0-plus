@@ -12,6 +12,7 @@ export const MEMORY_ENDPOINTS = {
   BASE: "/memories",
   BY_ID: (memoryId: string) => `/memories/${memoryId}`,
   HISTORY: (memoryId: string) => `/memories/${memoryId}/history`,
+  BATCH_DELETE: "/memories/batch-delete",
   CONFIGURE: "/configure",
   CONFIGURE_PROVIDERS: "/configure/providers",
   RESET: "/reset",
