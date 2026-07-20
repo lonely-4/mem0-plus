@@ -10,16 +10,13 @@ ENV PATH="/root/.local/bin:$PATH"
 COPY server/requirements.txt .
 RUN pip install -r requirements.txt
 
-# Install mem0 in editable mode (may pull newer transitive deps)
+# Install mem0 in editable mode using Poetry
 WORKDIR /app/packages
 COPY pyproject.toml .
 COPY poetry.lock .
 COPY README.md .
 COPY mem0 ./mem0
 RUN pip install -e .[graph]
-
-# Re-pin after mem0ai install: pydantic>=2.12 breaks fastmcp 2.9 Settings
-RUN pip install --force-reinstall "pydantic[email]==2.11.7" "fastmcp==2.9.2"
 
 # Return to app directory and copy server code
 WORKDIR /app

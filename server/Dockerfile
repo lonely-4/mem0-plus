@@ -4,8 +4,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir --force-reinstall "pydantic[email]==2.11.7" "fastmcp==2.9.2"
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

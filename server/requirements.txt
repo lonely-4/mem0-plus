@@ -1,7 +1,6 @@
 fastapi==0.115.8
 uvicorn==0.34.0
-# Keep pydantic <2.12: fastmcp<=2.9.x Field(default_factory=...) + = [] breaks on 2.12+
-pydantic[email]==2.11.7
+pydantic[email]==2.12.5
 mem0ai>=0.1.48
 python-dotenv==1.2.2
 psycopg[binary]>=3.2.8
@@ -26,6 +25,6 @@ posthog>=3.0,<8.0
 # Per-IP rate limiting on auth endpoints
 slowapi>=0.1.9,<1.0
 
-# MCP (Model Context Protocol) — Streamable HTTP at /mcp
-# Pin: 2.10+ pulls pydantic>=2.12 which crashes Settings (default + default_factory)
-fastmcp==2.9.2
+# MCP (Model Context Protocol) — Streamable HTTP at /mcp (gofastmcp)
+# 2.14+ fixes Settings Field(default+default_factory) crash on pydantic>=2.12
+fastmcp==2.14.0
