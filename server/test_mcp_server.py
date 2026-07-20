@@ -75,6 +75,27 @@ def test_mcp_success_envelope():
     assert payload["data"]["results"][0]["memory"] == "likes tea"
 
 
+def test_parse_mcp_log_fields_tools_call():
+    from request_logging import parse_mcp_log_fields
+
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "add_memory", "arguments": {"text": "hi", "user_id": "u1"}},
+        }
+    ).encode()
+    assert parse_mcp_log_fields(body) == ("MCP", "add_memory")
+
+
+def test_parse_mcp_log_fields_list_tools():
+    from request_logging import parse_mcp_log_fields
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).encode()
+    assert parse_mcp_log_fields(body) == ("MCP", "tools/list")
+
+
 def test_authenticate_request_rejects_missing_credentials():
     from auth import authenticate_request
 

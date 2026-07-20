@@ -32,6 +32,7 @@ from mem0.exceptions import ValidationError as Mem0ValidationError
 from models import RequestLog, User
 from pydantic import BaseModel, Field
 from rate_limit import limiter
+from request_logging import parse_mcp_log_fields
 from routers import api_keys as api_keys_router
 from routers import auth as auth_router
 from routers import entities as entities_router
@@ -335,6 +336,18 @@ async def log_requests(request: Request, call_next):
     token = request_id_var.set(rid)
     start = time.perf_counter()
     status_code = 500
+    log_method = request.method
+    log_path = request.url.path
+
+    # Cache body so MCP path can be rewritten to tool name; Starlette reuses _body.
+    if request.url.path.startswith("/mcp") and request.method in {"POST", "PUT", "PATCH"}:
+        try:
+            body = await request.body()
+            parsed = parse_mcp_log_fields(body)
+            if parsed:
+                log_method, log_path = parsed
+        except Exception:
+            logging.debug("Failed to parse MCP body for request log", exc_info=True)
 
     try:
         response = await call_next(request)
@@ -350,8 +363,8 @@ async def log_requests(request: Request, call_next):
             asyncio.get_running_loop().run_in_executor(
                 None,
                 _persist_request_log,
-                request.method,
-                request.url.path,
+                log_method,
+                log_path,
                 status_code,
                 round((time.perf_counter() - start) * 1000, 2),
                 getattr(request.state, "auth_type", "none"),

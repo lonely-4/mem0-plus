@@ -41,6 +41,8 @@ const getStatusClassName = (statusCode: number) => {
 
 const getMethodClassName = (method: string) => {
   switch (method.toUpperCase()) {
+    case "MCP":
+      return "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/40 dark:bg-violet-950/40 dark:text-violet-300";
     case "POST":
       return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/40 dark:text-sky-300";
     case "PUT":
