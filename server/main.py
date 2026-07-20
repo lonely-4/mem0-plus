@@ -2,10 +2,18 @@ import asyncio
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 import telemetry
-from auth import ADMIN_API_KEY, AUTH_DISABLED, JWT_SECRET, require_admin, verify_auth
+from auth import (
+    ADMIN_API_KEY,
+    AUTH_DISABLED,
+    JWT_SECRET,
+    authenticate_request,
+    require_admin,
+    verify_auth,
+)
 from db import SessionLocal
 from dotenv import load_dotenv
 from errors import (
@@ -19,6 +27,7 @@ from errors import (
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from mcp_server import create_mcp_app
 from mem0.exceptions import ValidationError as Mem0ValidationError
 from models import RequestLog, User
 from pydantic import BaseModel, Field
@@ -56,7 +65,7 @@ SENSITIVE_CONFIG_KEYS = {
     "token",
 }
 SKIPPED_REQUEST_LOG_PATHS = {"/api/health", "/docs", "/redoc", "/openapi.json"}
-SKIPPED_REQUEST_LOG_PREFIXES = ("/requests",)
+SKIPPED_REQUEST_LOG_PREFIXES = ("/requests", "/mcp")
 
 BUNDLED_LLM_PROVIDERS = ("openai", "anthropic", "gemini")
 BUNDLED_EMBEDDER_PROVIDERS = ("openai", "gemini")
@@ -141,6 +150,15 @@ DEFAULT_CONFIG = {
 set_session_factory(SessionLocal)
 initialize_state(DEFAULT_CONFIG)
 
+# FastMCP Streamable HTTP app (mounted at /mcp). Lifespan must be wired into FastAPI.
+mcp_app = create_mcp_app()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with mcp_app.lifespan(app):
+        yield
+
 
 app = FastAPI(
     title="Mem0 REST APIs",
@@ -148,10 +166,15 @@ app = FastAPI(
         "A REST API for managing and searching memories for your AI Agents and Apps.\n\n"
         "## Authentication\n"
         "Supports Bearer JWT tokens, per-user API keys via `X-API-Key` header, "
-        "or the legacy `ADMIN_API_KEY` environment variable. Set `AUTH_DISABLED=true` for local development only."
+        "or the legacy `ADMIN_API_KEY` environment variable. Set `AUTH_DISABLED=true` for local development only.\n\n"
+        "## MCP\n"
+        "Memory tools are also exposed via Model Context Protocol at `/mcp` "
+        "(Streamable HTTP). Authenticate with `Authorization: Bearer m0sk_...` "
+        "or `X-API-Key`. Connect MCP clients to `http://<host>:8000/mcp`."
     ),
     version="1.0.0",
     redirect_slashes=False,
+    lifespan=lifespan,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -169,6 +192,7 @@ app.include_router(auth_router.router)
 app.include_router(api_keys_router.router)
 app.include_router(entities_router.router)
 app.include_router(requests_router.router)
+app.mount("/mcp", mcp_app)
 
 
 class Message(BaseModel):
@@ -286,6 +310,21 @@ def _persist_request_log(method: str, path: str, status_code: int, latency_ms: f
         logging.exception("Failed to persist request log")
     finally:
         session.close()
+
+
+@app.middleware("http")
+async def mcp_auth_middleware(request: Request, call_next):
+    """Require m0sk_ API key / JWT / ADMIN_API_KEY for all /mcp traffic."""
+    if request.url.path.startswith("/mcp") and request.method != "OPTIONS":
+        try:
+            authenticate_request(request)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=dict(exc.headers or {}),
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")

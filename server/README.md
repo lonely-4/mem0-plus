@@ -70,12 +70,53 @@ make up
 
 Then open `http://localhost:3000` and complete the setup wizard.
 
+## MCP (Model Context Protocol)
+
+The server exposes Mem0 memory tools over Streamable HTTP at `/mcp` via [FastMCP](https://gofastmcp.com).
+
+| Endpoint | Transport |
+|----------|-----------|
+| `http://localhost:8888/mcp` | Streamable HTTP (stateless) |
+
+**Tools:** `add_memory`, `search_memories`, `get_all_memories`, `get_memory`, `update_memory`, `delete_memory`, `delete_all_memories`
+
+**Auth:** same as REST — pass a dashboard `m0sk_...` API key (or JWT / `ADMIN_API_KEY`):
+
+- `Authorization: Bearer m0sk_...` (preferred for MCP clients)
+- or `X-API-Key: m0sk_...`
+
+Example Cursor / Claude config:
+
+```json
+{
+  "mcpServers": {
+    "mem0": {
+      "url": "http://localhost:8888/mcp",
+      "headers": {
+        "Authorization": "Bearer m0sk_YOUR_KEY"
+      }
+    }
+  }
+}
+```
+
+Local dev without Docker (requires Postgres + env):
+
+```bash
+cd server
+uv venv .venv
+uv pip install -r requirements.txt -e .. --python .venv/Scripts/python.exe
+# set AUTH_DISABLED=true, JWT_SECRET, OPENAI_API_KEY, Postgres vars
+.venv/Scripts/uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
 ## Security Defaults
 
 - Dashboard login uses JWTs.
 - Programmatic access uses `X-API-Key`.
 - Auth is enabled by default.
 - `AUTH_DISABLED=true` exists for local development only and should not be used in production.
+- MCP `/mcp` requires the same auth as REST (`m0sk_` API key as Bearer, JWT, or `ADMIN_API_KEY`).
 
 ## Forgotten password
 

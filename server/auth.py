@@ -141,20 +141,43 @@ def _resolve_user_from_api_key(key: str, db: Session) -> User:
     raise HTTPException(status_code=401, detail="Invalid API key.")
 
 
-async def verify_auth(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    x_api_key: str | None = Depends(api_key_header),
-) -> User | None:
-    """Authenticate via JWT, X-API-Key, or legacy ADMIN_API_KEY. Returns User or None.
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
 
-    A short-lived session is opened only on the branches that query the DB, so no
-    pooled connection is held for the lifetime of the (possibly long-running) request.
+
+def authenticate_request(
+    request: Request,
+    *,
+    bearer_token: str | None = None,
+    x_api_key: str | None = None,
+) -> User | None:
+    """Authenticate via JWT, m0sk_ API key, or legacy ADMIN_API_KEY.
+
+    Accepts Bearer JWT, Bearer m0sk_ key (for MCP clients), or X-API-Key.
+    Returns User or None (admin key / AUTH_DISABLED). Raises HTTPException on failure.
     """
-    if credentials is not None:
+    if bearer_token is None:
+        bearer_token = _extract_bearer_token(request.headers.get("Authorization"))
+    if x_api_key is None:
+        x_api_key = request.headers.get("X-API-Key")
+
+    if bearer_token is not None:
+        # MCP clients send API keys as Authorization: Bearer m0sk_...
+        if bearer_token.startswith("m0sk_"):
+            _mark_auth_type(request, "api_key")
+            with SessionLocal() as db:
+                return _resolve_user_from_api_key(bearer_token, db)
+        if ADMIN_API_KEY and secrets.compare_digest(bearer_token, ADMIN_API_KEY):
+            _mark_auth_type(request, "admin_api_key")
+            return None
         _mark_auth_type(request, "bearer")
         with SessionLocal() as db:
-            return _resolve_user_from_jwt(credentials.credentials, db)
+            return _resolve_user_from_jwt(bearer_token, db)
 
     if x_api_key is not None:
         if ADMIN_API_KEY and secrets.compare_digest(x_api_key, ADMIN_API_KEY):
@@ -170,9 +193,23 @@ async def verify_auth(
 
     raise HTTPException(
         status_code=401,
-        detail="Authentication required. Provide a Bearer token or X-API-Key header.",
+        detail="Authentication required. Provide a Bearer token (JWT or m0sk_ API key) or X-API-Key header.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+async def verify_auth(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    x_api_key: str | None = Depends(api_key_header),
+) -> User | None:
+    """Authenticate via JWT, X-API-Key, or legacy ADMIN_API_KEY. Returns User or None.
+
+    A short-lived session is opened only on the branches that query the DB, so no
+    pooled connection is held for the lifetime of the (possibly long-running) request.
+    """
+    bearer = credentials.credentials if credentials is not None else None
+    return authenticate_request(request, bearer_token=bearer, x_api_key=x_api_key)
 
 
 async def require_auth(
