@@ -2,12 +2,21 @@
 
 Mounted into the FastAPI app at /mcp (see main.py).
 Uses the shared Memory instance from server_state.
+
+All tools return a uniform envelope:
+  success: {"ok": true, "data": ...}
+  failure: {"ok": false, "error": {"code", "message", "request_id", "tool"}}
+Exceptions are caught so FastMCP does not dump full tracebacks to the console.
 """
+
+from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from functools import wraps
+from typing import Any, Callable
 
+from errors import mcp_error_payload, mcp_success_payload
 from fastmcp import FastMCP
 from server_state import get_memory_instance
 
@@ -19,7 +28,8 @@ mcp = FastMCP(
         "Mem0 self-hosted memory tools. "
         "Use add_memory to store facts/preferences, search_memories to retrieve them, "
         "and the get/update/delete tools to manage individual memories. "
-        "Always pass user_id (or agent_id/run_id) so memories are scoped correctly."
+        "Always pass user_id (or agent_id/run_id) so memories are scoped correctly. "
+        "Every tool returns JSON with ok=true and data on success, or ok=false and error on failure."
     ),
 )
 
@@ -33,14 +43,30 @@ def _require_scope(user_id: str | None, agent_id: str | None, run_id: str | None
         raise ValueError("At least one of user_id, agent_id, or run_id is required.")
 
 
+def mcp_tool_safe(fn: Callable[..., Any]) -> Callable[..., str]:
+    """Wrap a tool so all exceptions become a structured ok=false JSON response."""
+
+    @wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> str:
+        tool_name = fn.__name__
+        try:
+            result = fn(*args, **kwargs)
+            return _json(mcp_success_payload(result))
+        except Exception as exc:
+            return _json(mcp_error_payload(tool_name, exc))
+
+    return wrapper
+
+
 @mcp.tool
+@mcp_tool_safe
 def add_memory(
     text: str,
     user_id: str | None = None,
     agent_id: str | None = None,
     run_id: str | None = None,
     infer: bool = True,
-) -> str:
+) -> Any:
     """Store a new memory from text. Call when the user shares preferences, facts, or asks you to remember something.
 
     Args:
@@ -59,18 +85,18 @@ def add_memory(
         params["agent_id"] = agent_id
     if run_id:
         params["run_id"] = run_id
-    result = memory.add(messages=[{"role": "user", "content": text}], **params)
-    return _json(result)
+    return memory.add(messages=[{"role": "user", "content": text}], **params)
 
 
 @mcp.tool
+@mcp_tool_safe
 def search_memories(
     query: str,
     user_id: str | None = None,
     agent_id: str | None = None,
     run_id: str | None = None,
     limit: int = 10,
-) -> str:
+) -> Any:
     """Search stored memories. Call whenever you need prior context about the user or conversation.
 
     Args:
@@ -89,17 +115,17 @@ def search_memories(
         filters["agent_id"] = agent_id
     if run_id:
         filters["run_id"] = run_id
-    result = memory.search(query=query, filters=filters, top_k=limit)
-    return _json(result)
+    return memory.search(query=query, filters=filters, top_k=limit)
 
 
 @mcp.tool
+@mcp_tool_safe
 def get_all_memories(
     user_id: str | None = None,
     agent_id: str | None = None,
     run_id: str | None = None,
     limit: int = 100,
-) -> str:
+) -> Any:
     """List all memories for a given scope (user/agent/run).
 
     Args:
@@ -117,23 +143,24 @@ def get_all_memories(
         filters["agent_id"] = agent_id
     if run_id:
         filters["run_id"] = run_id
-    result = memory.get_all(filters=filters, top_k=limit)
-    return _json(result)
+    return memory.get_all(filters=filters, top_k=limit)
 
 
 @mcp.tool
-def get_memory(memory_id: str) -> str:
+@mcp_tool_safe
+def get_memory(memory_id: str) -> Any:
     """Retrieve a single memory by its ID.
 
     Args:
         memory_id: The memory UUID.
     """
     memory = get_memory_instance()
-    return _json(memory.get(memory_id))
+    return memory.get(memory_id)
 
 
 @mcp.tool
-def update_memory(memory_id: str, text: str) -> str:
+@mcp_tool_safe
+def update_memory(memory_id: str, text: str) -> Any:
     """Update an existing memory's content.
 
     Args:
@@ -141,11 +168,12 @@ def update_memory(memory_id: str, text: str) -> str:
         text: New content for the memory.
     """
     memory = get_memory_instance()
-    return _json(memory.update(memory_id=memory_id, data=text))
+    return memory.update(memory_id=memory_id, data=text)
 
 
 @mcp.tool
-def delete_memory(memory_id: str) -> str:
+@mcp_tool_safe
+def delete_memory(memory_id: str) -> Any:
     """Delete a specific memory by ID.
 
     Args:
@@ -153,15 +181,16 @@ def delete_memory(memory_id: str) -> str:
     """
     memory = get_memory_instance()
     memory.delete(memory_id=memory_id)
-    return _json({"message": "Memory deleted successfully", "memory_id": memory_id})
+    return {"message": "Memory deleted successfully", "memory_id": memory_id}
 
 
 @mcp.tool
+@mcp_tool_safe
 def delete_all_memories(
     user_id: str | None = None,
     agent_id: str | None = None,
     run_id: str | None = None,
-) -> str:
+) -> Any:
     """Delete all memories for a given scope. Requires at least one of user_id/agent_id/run_id.
 
     Args:
@@ -179,7 +208,7 @@ def delete_all_memories(
     if run_id:
         params["run_id"] = run_id
     memory.delete_all(**params)
-    return _json({"message": "All relevant memories deleted", **params})
+    return {"message": "All relevant memories deleted", **params}
 
 
 def create_mcp_app():

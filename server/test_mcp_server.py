@@ -1,5 +1,6 @@
 """Unit tests for MCP tool registration and auth helpers (no DB required for tools)."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,6 +25,54 @@ def test_create_mcp_app_has_lifespan():
     app = create_mcp_app()
     assert hasattr(app, "lifespan")
     assert callable(app.lifespan)
+
+
+def test_mcp_tool_returns_ok_envelope_on_validation_error():
+    """Missing scope must not raise; returns ok=false JSON for the agent."""
+    raw = mcp._tool_manager._tools["add_memory"].fn(text="hello")
+    payload = json.loads(raw)
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == "validation_error"
+    assert payload["error"]["tool"] == "add_memory"
+    assert "request_id" in payload["error"]
+
+
+def test_mcp_tool_returns_ok_envelope_on_provider_error():
+    from mem0.exceptions import LLMError
+
+    with patch("mcp_server.get_memory_instance") as get_mem:
+        mem = MagicMock()
+        mem.add.side_effect = LLMError(
+            "LLM extraction failed: 400 FAILED_PRECONDITION. "
+            "{'error': {'message': 'User location is not supported for the API use.'}}"
+        )
+        get_mem.return_value = mem
+        raw = mcp._tool_manager._tools["add_memory"].fn(text="hello", user_id="u1")
+    payload = json.loads(raw)
+    assert payload["ok"] is False
+    assert payload["error"]["code"] in {
+        "provider_region_unsupported",
+        "llm_extraction_failed",
+    }
+
+
+def test_classify_region_message():
+    from errors import classify_exception
+
+    code, msg = classify_exception(Exception("User location is not supported for the API use."))
+    assert code == "provider_region_unsupported"
+    assert "region" in msg.lower() or "location" in msg.lower()
+
+
+def test_mcp_success_envelope():
+    with patch("mcp_server.get_memory_instance") as get_mem:
+        mem = MagicMock()
+        mem.search.return_value = {"results": [{"memory": "likes tea"}]}
+        get_mem.return_value = mem
+        raw = mcp._tool_manager._tools["search_memories"].fn(query="tea", user_id="u1")
+    payload = json.loads(raw)
+    assert payload["ok"] is True
+    assert payload["data"]["results"][0]["memory"] == "likes tea"
 
 
 def test_authenticate_request_rejects_missing_credentials():

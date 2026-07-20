@@ -85,6 +85,15 @@ The server exposes Mem0 memory tools over Streamable HTTP at `/mcp` via [FastMCP
 - `Authorization: Bearer m0sk_...` (preferred for MCP clients)
 - or `X-API-Key: m0sk_...`
 
+**Tool responses** use a uniform envelope (exceptions are caught — no traceback spam):
+
+```json
+{"ok": true, "data": { ... }}
+{"ok": false, "error": {"code": "provider_region_unsupported", "message": "...", "request_id": "...", "tool": "add_memory"}}
+```
+
+Set `MEM0_MCP_DEBUG=true` to log full stack traces for unknown tool errors. MCP HTTP traffic is written to `request_logs` (Dashboard → Requests).
+
 Example Cursor / Claude config:
 
 ```json
