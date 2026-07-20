@@ -163,15 +163,9 @@ export class Mem0 implements INodeType {
 						default: '',
 					},
 					{
-						displayName: 'Run ID',
-						name: 'run_id',
+						displayName: 'App ID',
+						name: 'app_id',
 						type: 'string',
-						default: '',
-					},
-					{
-						displayName: 'Metadata (JSON)',
-						name: 'metadata',
-						type: 'json',
 						default: '',
 					},
 					{
@@ -180,7 +174,20 @@ export class Mem0 implements INodeType {
 						type: 'boolean',
 						default: true,
 						description:
-							'Whether to run LLM extraction (async). Turn off to store messages verbatim (synchronous).',
+							'Whether to run LLM extraction over the messages. Turn off to store them verbatim. ' +
+							'This controls extraction only — use "Wait for Completion" to control whether the node waits.',
+					},
+					{
+						displayName: 'Metadata (JSON)',
+						name: 'metadata',
+						type: 'json',
+						default: '',
+					},
+					{
+						displayName: 'Run ID',
+						name: 'run_id',
+						type: 'string',
+						default: '',
 					},
 				],
 			},
@@ -315,6 +322,7 @@ export class Mem0 implements INodeType {
 					const userId = this.getNodeParameter('userId', i, '') as string;
 					if (userId) body.user_id = userId;
 					if (addFields.agent_id) body.agent_id = addFields.agent_id;
+					if (addFields.app_id) body.app_id = addFields.app_id;
 					if (addFields.run_id) body.run_id = addFields.run_id;
 					if (addFields.metadata) {
 						try {
@@ -329,14 +337,23 @@ export class Mem0 implements INodeType {
 						}
 					}
 
+					// API requires at least one entity id — fail clearly instead of a raw 4xx.
+					if (!body.user_id && !body.agent_id && !body.run_id && !body.app_id) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Add requires at least one of User ID, Agent ID, Run ID, or App ID',
+							{ itemIndex: i },
+						);
+					}
+
 					const addResp = await request('POST', '/v3/memories/add/', body);
 					const waitForCompletion = this.getNodeParameter('waitForCompletion', i, true) as boolean;
 					const addStatus = addResp.status as string | undefined;
 					const isTerminal = addStatus === 'SUCCEEDED' || addStatus === 'FAILED';
 
-					// infer=true returns {event_id, status:PENDING|RUNNING}; poll until terminal.
+					// Add returns {event_id, status:PENDING|RUNNING}; poll until terminal when asked to wait.
 					if (waitForCompletion && addResp.event_id && !isTerminal) {
-						responseData = await pollEvent(request, addResp.event_id as string, this);
+						responseData = await pollEvent(request, addResp.event_id as string, this, i);
 					} else if (addStatus === 'FAILED') {
 						throw new NodeOperationError(
 							this.getNode(),
@@ -344,7 +361,7 @@ export class Mem0 implements INodeType {
 							{ itemIndex: i },
 						);
 					} else {
-						// Sync path (infer=false) returns {status:SUCCEEDED, results:[...]}; unwrap for consistency.
+						// If the response is already terminal, unwrap results; otherwise return as-is.
 						responseData = Array.isArray(addResp.results)
 							? (addResp.results as IDataObject[])
 							: addResp;
@@ -419,21 +436,28 @@ async function pollEvent(
 	request: (m: IHttpRequestMethods, u: string) => Promise<IDataObject>,
 	eventId: string,
 	ctx: IExecuteFunctions,
-): Promise<IDataObject> {
+	itemIndex: number,
+): Promise<IDataObject | IDataObject[]> {
 	for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
 		const event = await request('GET', `/v1/event/${eventId}/`);
 		const status = event.status as string;
 		if (status === 'SUCCEEDED') {
-			return event;
+			// Match the shape of search/getAll (a clean array); fall back to the envelope.
+			return Array.isArray(event.results) ? (event.results as IDataObject[]) : event;
 		}
 		if (status === 'FAILED') {
 			const reason = (event.error as string) || (event.message as string) || 'unknown error';
-			throw new NodeOperationError(ctx.getNode(), `Mem0 memory event ${eventId} failed: ${reason}`);
+			throw new NodeOperationError(
+				ctx.getNode(),
+				`Mem0 memory event ${eventId} failed: ${reason}`,
+				{ itemIndex },
+			);
 		}
 		await sleep(POLL_INTERVAL_MS);
 	}
 	throw new NodeOperationError(
 		ctx.getNode(),
 		`Timed out waiting for memory event ${eventId} to complete`,
+		{ itemIndex },
 	);
 }

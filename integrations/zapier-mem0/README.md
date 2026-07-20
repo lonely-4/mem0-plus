@@ -13,7 +13,9 @@ Built with the [Zapier Platform CLI](https://docs.zapier.com/platform/quickstart
 | Search | **Search Memories** | `POST /v3/memories/search/` |
 | Search | **Get Memories** | `POST /v3/memories/` |
 
-**Add Memory** runs LLM extraction asynchronously by default; the action polls the event until it completes and returns the resulting memories. Turn off **Wait for Completion** to return immediately, or set **Infer = false** to store verbatim (synchronous).
+**Add Memory** runs LLM extraction asynchronously and returns immediately with an event ID by default. Turn on **Wait for Completion** to have the action poll until extraction finishes and return the resulting memories — note that extraction can take longer than Zapier allows a single step to run, and a timeout there does **not** mean the add failed (it typically still completes server-side). Set **Infer = false** to store the message verbatim instead of extracting.
+
+**Get Memories** returns one page at a time; use the **Page** and **Limit** fields to page through larger result sets.
 
 ## Authentication
 

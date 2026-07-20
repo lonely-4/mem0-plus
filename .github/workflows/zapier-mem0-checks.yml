@@ -3,9 +3,10 @@ name: zapier-mem0 checks
 # On PRs this is invoked by ci-gate.yml (the single required check);
 # push-to-main and manual runs remain standalone.
 #
-# CI runs `zapier validate` (offline schema + style checks). The end-to-end
-# jest suite is skipped here because it hits the live Mem0 API — it runs
-# locally with MEM0_API_KEY set (see the package README).
+# CI runs `zapier validate` (offline schema + style checks) plus the offline
+# jest unit suite (test/unit.test.js — mocked z.request, no network). The
+# end-to-end jest suite is skipped here because it hits the live Mem0 API — it
+# runs locally with MEM0_API_KEY set (see the package README).
 on:
   workflow_dispatch:
   push:
@@ -38,3 +39,6 @@ jobs:
 
       - name: Validate Zapier app definition
         run: cd integrations/zapier-mem0 && npx zapier-platform-cli@19 validate
+
+      - name: Run offline unit tests
+        run: cd integrations/zapier-mem0 && pnpm test:unit

@@ -14,6 +14,18 @@ const authData = {
 
 const userId = `zapier-e2e-${Date.now()}`;
 
+// Retry an async op until `done` is satisfied or attempts run out. Extraction is
+// async, so the default Add returns before the memory is searchable.
+const until = async (fn, done, { attempts = 30, delayMs = 2000 } = {}) => {
+	let last;
+	for (let i = 0; i < attempts; i++) {
+		last = await fn();
+		if (done(last)) return last;
+		await new Promise((resolve) => setTimeout(resolve, delayMs));
+	}
+	return last;
+};
+
 // The E2E suite hits the live Mem0 API, so it only runs when MEM0_API_KEY is
 // set (locally / with a secret). In CI without a key it is skipped, not failed.
 const describeE2E = authData.apiKey ? describe : describe.skip;
@@ -26,22 +38,25 @@ describeE2E('Mem0 Zapier integration (E2E)', () => {
 	});
 
 	it('adds, searches, lists, and deletes a memory', async () => {
-		// Add (async, wait for completion)
+		// Add via the default path: returns immediately with an event id.
 		const added = await appTester(App.creates.add_memory.operation.perform, {
 			authData,
 			inputData: {
 				content: 'I love hiking in the Alps and my favorite food is sushi',
 				user_id: userId,
-				waitForCompletion: true,
 			},
 		});
-		expect(added.status).toBe('SUCCEEDED');
+		expect(added.event_id).toBeDefined();
 
-		// Search
-		const found = await appTester(App.searches.search_memories.operation.perform, {
-			authData,
-			inputData: { query: 'outdoor activities', user_id: userId, limit: 5 },
-		});
+		// Extraction is async; retry search until the memory is indexed.
+		const found = await until(
+			() =>
+				appTester(App.searches.search_memories.operation.perform, {
+					authData,
+					inputData: { query: 'outdoor activities', user_id: userId, limit: 5 },
+				}),
+			(r) => Array.isArray(r) && r.length > 0,
+		);
 		expect(Array.isArray(found)).toBe(true);
 		expect(found.length).toBeGreaterThan(0);
 

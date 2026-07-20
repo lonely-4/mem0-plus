@@ -1,9 +1,9 @@
 'use strict';
 
 const perform = async (z, bundle) => {
-	// Trailing slash required (Django APPEND_SLASH).
+	// Trailing slash required (Django APPEND_SLASH); id encoded so a stray slash can't mistarget the path.
 	const response = await z.request({
-		url: `/v1/memories/${bundle.inputData.memory_id}/`,
+		url: `/v1/memories/${encodeURIComponent(bundle.inputData.memory_id)}/`,
 		method: 'DELETE',
 	});
 	return response.data || { message: 'Deleted', memory_id: bundle.inputData.memory_id };

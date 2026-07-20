@@ -22,7 +22,8 @@
   "license": "MIT",
   "main": "index.js",
   "scripts": {
-    "test": "jest --testTimeout 120000"
+    "test": "jest --testTimeout 120000",
+    "test:unit": "jest test/unit.test.js"
   },
   "engines": {
     "node": ">=18",

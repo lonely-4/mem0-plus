@@ -1,7 +1,8 @@
 'use strict';
 
 const POLL_INTERVAL_MS = 1500;
-const MAX_POLL_ATTEMPTS = 40; // ~60s
+// Bounded so the poll budget stays under Zapier's per-step execution timeout.
+const MAX_POLL_ATTEMPTS = 12;
 
 // Polls GET /v1/event/{id}/ until the async memory-addition event resolves.
 const pollEvent = async (z, eventId) => {
@@ -18,7 +19,8 @@ const pollEvent = async (z, eventId) => {
 		await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 	}
 	throw new z.errors.Error(
-		`Timed out waiting for memory event ${eventId} to complete`,
+		`Timed out waiting for memory event ${eventId}. The add was accepted and is ` +
+			`likely still completing on the server — a timeout here does not mean it failed.`,
 		'Mem0Timeout',
 		408,
 	);
@@ -28,7 +30,8 @@ const perform = async (z, bundle) => {
 	// Zapier boolean fields can arrive as the strings 'true'/'false'; coerce
 	// explicitly so "Infer = No" / "Wait = No" are honored.
 	const infer = String(bundle.inputData.infer) !== 'false';
-	const wait = String(bundle.inputData.waitForCompletion) !== 'false';
+	// Waiting is opt-in (the poll path can exceed Zapier's step timeout).
+	const wait = String(bundle.inputData.waitForCompletion) === 'true';
 
 	const body = {
 		messages: [{ role: bundle.inputData.role || 'user', content: bundle.inputData.content }],
@@ -56,7 +59,7 @@ const perform = async (z, bundle) => {
 
 	const data = response.data;
 
-	// infer=true returns {event_id, status:PENDING|RUNNING}; optionally wait.
+	// Add returns {event_id, status:PENDING|RUNNING}; poll only when opted in.
 	if (wait && data.event_id && data.status !== 'SUCCEEDED' && data.status !== 'FAILED') {
 		return pollEvent(z, data.event_id);
 	}
@@ -99,14 +102,17 @@ module.exports = {
 				label: 'Infer',
 				type: 'boolean',
 				default: 'true',
-				helpText: 'Run LLM extraction (async). Turn off to store verbatim (synchronous).',
+				helpText: 'Run LLM extraction over the message. Turn off to store it verbatim.',
 			},
 			{
 				key: 'waitForCompletion',
 				label: 'Wait for Completion',
 				type: 'boolean',
-				default: 'true',
-				helpText: 'Poll until extraction finishes and return the resulting memories.',
+				default: 'false',
+				helpText:
+					'Poll until extraction finishes and return the resulting memories. ' +
+					'Leave off (default) to return immediately with an event ID — extraction can take ' +
+					'longer than Zapier allows this step to run, and a timeout does not mean the add failed.',
 			},
 		],
 		sample: { status: 'SUCCEEDED', event_id: '00000000-0000-0000-0000-000000000000', results: [] },
