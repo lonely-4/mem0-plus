@@ -6,11 +6,15 @@ interface Column<T> {
   label: string;
   icon?: LucideIcon;
   render?(value: T[keyof T], row: T): ReactNode;
+  /** Custom header cell content (e.g. select-all checkbox). */
+  renderHeader?(): ReactNode;
   className?: string;
   width?: number | "auto";
   align?: "left" | "center" | "right";
   cellVariant?: "default" | "flush";
   headerVariant?: "default" | "check";
+  /** Prefer fixed min width so narrow columns (checkbox) do not collapse. */
+  stickyWidth?: number;
 }
 
 interface DataTableProps<T> {
@@ -25,21 +29,19 @@ interface DataTableProps<T> {
 const classes = {
   tableHeaderRow: "h-[38px] border-b border-memBorder-primary",
   tableHeaderCell:
-    "w-[230px] h-[38px] p-2 align-middle bg-surface-default-fg-secondary text-onSurface-default-secondary",
+    "h-[38px] p-2 align-middle bg-surface-default-fg-secondary text-onSurface-default-secondary",
   tableHeaderCheckCell:
-    "w-[40px] h-[38px] p-2 align-middle bg-surface-default-fg-secondary",
-  tableHeaderCheckWrap: "flex items-center gap-2",
-  tableHeaderCheckBox:
-    "box-border flex h-4 w-4 items-center gap-2.5 rounded-sm border border-memBorder-primary p-1",
+    "w-10 min-w-10 max-w-10 h-[38px] p-2 align-middle bg-surface-default-fg-secondary",
+  tableHeaderCheckWrap: "flex h-full items-center justify-center",
   tableHeaderDivider:
     "w-px self-stretch border border-memBorder-primary shrink-0",
   tableRow:
     "h-[38px] border-t border-memBorder-primary bg-surface-default-primary hover:bg-surface-default-primary-hover",
   tableCell:
     "text-sm font-medium text-onSurface-default-primary px-4 py-2 justify-start align-middle font-[Fustat] leading-[140%] tracking-normal",
-  tableCellFlush: "align-middle",
-  tableCellBase: "text-sm px-6",
-  tableCellPadding: "",
+  tableCellFlush: "align-middle p-0",
+  tableCellCheck:
+    "w-10 min-w-10 max-w-10 align-middle p-0",
 } as const;
 
 export function DataTable<T>({
@@ -51,24 +53,35 @@ export function DataTable<T>({
   getRowClassName,
 }: DataTableProps<T>) {
   const minHeight = data.length > 0 ? Math.max(76, 38 + data.length * 38) : 100;
-  // Proportional column widths so table fits container (width numbers treated as relative weights)
-  const totalWeight = columns.reduce(
+  const flexible = columns.filter((c) => !c.stickyWidth);
+  const stickyTotal = columns.reduce(
+    (sum, col) => sum + (col.stickyWidth ?? 0),
+    0,
+  );
+  const flexWeight = flexible.reduce(
     (sum, col) => sum + (typeof col.width === "number" ? col.width : 100),
     0,
   );
+
   return (
     <div
-      className={`min-w-0 max-w-full overflow-hidden transition-all duration-300 ease-in-out ${className}`}
+      className={`min-w-0 max-w-full overflow-x-auto transition-all duration-300 ease-in-out ${className}`}
       style={{ minHeight: `${minHeight}px` }}
     >
-      <table className="table-fixed w-full">
+      <table className="table-fixed w-full" style={{ minWidth: stickyTotal + 480 }}>
         <colgroup>
           {columns.map((col, i) => {
+            if (col.stickyWidth) {
+              return (
+                <col
+                  key={i}
+                  style={{ width: col.stickyWidth, minWidth: col.stickyWidth }}
+                />
+              );
+            }
             const weight = typeof col.width === "number" ? col.width : 100;
             const pct =
-              totalWeight > 0
-                ? (weight / totalWeight) * 100
-                : 100 / columns.length;
+              flexWeight > 0 ? (weight / flexWeight) * 100 : 100 / Math.max(flexible.length, 1);
             return <col key={i} style={{ width: `${pct}%` }} />;
           })}
         </colgroup>
@@ -77,12 +90,28 @@ export function DataTable<T>({
             {columns.map((column, index) => {
               const isLastColumn = index === columns.length - 1;
 
-              if (column.headerVariant === "check") {
+              if (column.headerVariant === "check" || column.renderHeader) {
                 return (
-                  <th key={index} className={classes.tableHeaderCheckCell}>
+                  <th
+                    key={index}
+                    className={
+                      column.headerVariant === "check"
+                        ? classes.tableHeaderCheckCell
+                        : `${classes.tableHeaderCell} min-w-0`
+                    }
+                    style={
+                      column.stickyWidth
+                        ? { width: column.stickyWidth, minWidth: column.stickyWidth }
+                        : undefined
+                    }
+                  >
                     <div className="flex h-full items-stretch justify-between">
                       <div className={classes.tableHeaderCheckWrap}>
-                        <span className={classes.tableHeaderCheckBox} />
+                        {column.renderHeader ? (
+                          column.renderHeader()
+                        ) : (
+                          <span className="box-border flex h-4 w-4 items-center rounded-sm border border-memBorder-primary" />
+                        )}
                       </div>
                       {!isLastColumn && (
                         <div className={classes.tableHeaderDivider} />
@@ -166,17 +195,40 @@ export function DataTable<T>({
             >
               {columns.map((column, colIndex) => {
                 const value = row[column.key];
-                const baseCellClass =
-                  column.cellVariant === "flush"
+                const isCheck =
+                  column.headerVariant === "check" || !!column.stickyWidth;
+                const baseCellClass = isCheck
+                  ? classes.tableCellCheck
+                  : column.cellVariant === "flush"
                     ? classes.tableCellFlush
                     : classes.tableCell;
-                const cellClassName = `${column.className || baseCellClass} min-w-0 overflow-hidden`;
+                // Avoid overflow-hidden on checkbox cells so controls are not clipped.
+                const cellClassName = isCheck
+                  ? `${column.className || baseCellClass}`
+                  : `${column.className || baseCellClass} min-w-0 overflow-hidden`;
                 return (
-                  <td key={colIndex} className={cellClassName}>
-                    <div className="min-w-0 overflow-hidden">
+                  <td
+                    key={colIndex}
+                    className={cellClassName}
+                    style={
+                      column.stickyWidth
+                        ? {
+                            width: column.stickyWidth,
+                            minWidth: column.stickyWidth,
+                          }
+                        : undefined
+                    }
+                  >
+                    <div
+                      className={
+                        isCheck
+                          ? "flex items-center justify-center"
+                          : "min-w-0 overflow-hidden"
+                      }
+                    >
                       {column.render
                         ? column.render(value, row)
-                        : String(value)}
+                        : String(value ?? "")}
                     </div>
                   </td>
                 );

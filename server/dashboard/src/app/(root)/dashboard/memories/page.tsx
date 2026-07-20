@@ -163,11 +163,25 @@ export default function MemoriesPage() {
     {
       key: "id" as keyof Memory,
       label: "",
-      width: 48,
-      cellVariant: "flush" as const,
+      stickyWidth: 44,
+      headerVariant: "check" as const,
+      renderHeader: () => (
+        <Checkbox
+          checked={
+            allPageSelected
+              ? true
+              : somePageSelected
+                ? "indeterminate"
+                : false
+          }
+          onCheckedChange={(v) => togglePage(v === true)}
+          aria-label="Select all on this page"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
       render: (_value: string, row: Memory) => (
         <div
-          className="flex items-center justify-center px-2"
+          className="flex items-center justify-center py-2"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
@@ -235,22 +249,6 @@ export default function MemoriesPage() {
           }}
           className="w-64"
         />
-        {paginatedMemories.length > 0 && (
-          <label className="flex items-center gap-2 text-sm text-onSurface-default-secondary cursor-pointer select-none">
-            <Checkbox
-              checked={
-                allPageSelected
-                  ? true
-                  : somePageSelected
-                    ? "indeterminate"
-                    : false
-              }
-              onCheckedChange={(v) => togglePage(v === true)}
-              aria-label="Select all on this page"
-            />
-            Select page
-          </label>
-        )}
       </div>
 
       {isLoading ? (
