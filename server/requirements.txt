@@ -1,5 +1,6 @@
 fastapi==0.115.8
-uvicorn==0.34.0
+# fastmcp 2.14+ requires uvicorn>=0.35
+uvicorn>=0.35,<1.0
 pydantic[email]==2.12.5
 mem0ai>=0.1.48
 python-dotenv==1.2.2
